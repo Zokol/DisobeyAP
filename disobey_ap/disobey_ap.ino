@@ -38,7 +38,9 @@
 
 #define MAX_TELNET_CLIENTS 5
 #define CHATLOG_SIZE 10
-const char *ssid = "FREE INTERNETZ";
+const char *ssid = "Hki-open";
+uint8_t mac[WL_MAC_ADDR_LENGTH];
+String macID;
 
 WiFiServer telnet_server(23);
 WiFiClient telnet_clients[MAX_TELNET_CLIENTS];
@@ -60,16 +62,82 @@ String page_Content = "";
 String chatlog = "";
 
 void handleRoot() {
-	server.send(200, "text/html", page_Content);
   visitor_count += 1;
+	server.send(200, "text/html", page_Content);
   Serial.println();
   Serial.print("Page load count: ");
   Serial.print(visitor_count);
 }
 
+
+void changeSSID() {
+  /*
+  Serial.println("ssid-start\r\n");
+  Serial.println(server.hostHeader());
+  Serial.print("request arguments: ");
+  int request_args = server.args();
+  Serial.println(request_args);
+  Serial.print("request argiment[0]: ");
+  String request_argument0_value = server.arg(0);
+  String request_argument0_name = server.argName(0);
+  Serial.println(request_argument0_value + ": " + request_argument0_name);
+  Serial.print("request headers: ");
+  int request_headers = server.headers();
+  Serial.println(request_headers);
+  Serial.print("request header[0]: ");
+  String request_header0_value = server.header(0);
+  String request_header0_name = server.headerName(0);
+  Serial.println(request_header0_name + ": " + request_header0_value);
+  WiFiClient client = server.client();
+  Serial.println("client initialized\r\n");
+  if(client){
+    Serial.println("client available\r\n");
+    //String req = client.read();
+    //Serial.print("client content: ");
+    //Serial.println(req);
+    client.flush();
+  }
+  Serial.println("returning\r\n");
+  */
+  String new_ssid = server.arg("ssid");
+  if(new_ssid.length() > 0){
+    char new_ssid_char[new_ssid.length()+1];
+    new_ssid.toCharArray(new_ssid_char, new_ssid.length()+1);
+    server.send(200, "text/html", "SSID will be changed in 10s");
+    WiFi.disconnect();
+    WiFi.softAPdisconnect();
+    WiFi.mode(WIFI_OFF);
+    delay(500);
+    
+    Serial.print("Configuring access point...\r\n");
+  
+    // Read mac-address to memory
+    WiFi.softAPmacAddress(mac);
+    macID = mac_to_string();
+    macID.toUpperCase();
+  
+    // Setup WiFi Access Point
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(ip, gateway, subnet);
+    WiFi.softAP(new_ssid_char);
+  }
+  else {
+    server.send(200, "text/html", "ERROR -- Incorrect value for SSID");
+  }
+}
+
+
 void rx_msg(byte msg){
   //chatlog = msg;
   Serial.print("Client said"); Serial.print(msg);
+}
+
+String mac_to_string(){
+  String str = "";
+  for(int i = 0; i < WL_MAC_ADDR_LENGTH; i++){
+    str += String(mac[i], HEX);
+  }
+  return str;
 }
 
 
@@ -115,8 +183,6 @@ void handle_telnet(){
   */
 }
 
-
-
 void setup() {
   
   page_Content += "<!DOCTYPE HTML>\r\n<html>\r\n";
@@ -126,6 +192,7 @@ void setup() {
   page_Content += "<meta name='date' content='Jan 12-13 2018'>\r\n";
   page_Content += "<meta name='location' content='Kattilahalli, Helsinki'>\r\n";
   page_Content += "<meta name='website' content='disobey.fi'>\r\n";
+  page_Content += "<meta name='debug' content='{mac:" + macID + ", vc:" + String(visitor_count) + "}'>\r\n";
   page_Content += "</head>\r\n";
   page_Content += "<body style='background:black;'>\r\n";
   page_Content += "<div id='container' style='width:100%; margin:auto; color: green; font-family: courier; font-size: -webkit-xxx-large; text-align:center;'>\r\n";
@@ -139,29 +206,35 @@ void setup() {
 	Serial.begin(74880);
 	Serial.println();
 	
-	Serial.print("Cleaning up...");
+	Serial.print("Cleaning up...\r\n");
 
   WiFi.disconnect();
   WiFi.softAPdisconnect();
   WiFi.mode(WIFI_OFF);
   delay(500);
   
-  Serial.print("Configuring access point...");
-  
+  Serial.print("Configuring access point...\r\n");
+
+  // Read mac-address to memory
+  WiFi.softAPmacAddress(mac);
+  macID = mac_to_string();
+  macID.toUpperCase();
+
+  // Setup WiFi Access Point
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(ip, gateway, subnet);
 	WiFi.softAP(ssid);
 
   dnsServer.setTTL(300);
-
   dnsServer.start(DNS_PORT, "*", ip);
  
 	server.onNotFound([](){
 	  handleRoot();
 	});
 	server.on("/", handleRoot);
+  server.on("/ssid", changeSSID);
 	server.begin();
-	Serial.println("HTTP server started");
+	Serial.println("HTTP server started\r\n");
 
   telnet_server.begin();
   telnet_server.setNoDelay(true);
